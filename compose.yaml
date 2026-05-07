@@ -8,4 +8,4 @@ services:
       - SERVIDOR=${SERVIDOR} #Se reemplazará por la env var SERVIDOR defineda en .env
       - TOPICO=${TOPICO}
       - TOPICO_PUB=${TOPICO_PUB}
-    restart: unless-stopped
+    restart: unless-stopped 

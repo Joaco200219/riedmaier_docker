@@ -46,7 +46,7 @@ async def main():
         topicos = os.environ['TOPICO'].split(",")
         for topico in topicos:
             logging.info(f"Suscrito al topico: {topico}")
-            await client.subscribe(topico)
+            await client.subscribe(topico)  
 
         #Corrutinas
         asyncio.create_task(escuchar_y_derivar(client, topicos[0], topicos[1]))
