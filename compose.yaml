@@ -48,6 +48,9 @@ services:
     volumes:
       - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - ./mosquitto/config:/mosquitto/config
+      - ./swag/etc/letsencrypt:/var/tmp
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
   grafana:
     image: grafana/grafana-oss
     container_name: grafana
