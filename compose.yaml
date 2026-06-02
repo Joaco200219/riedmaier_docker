@@ -111,8 +111,15 @@ services:
       - MARIADB_USER=${MARIADB_USER}
       - MARIADB_USER_PASS=${MARIADB_USER_PASS}
       - MARIADB_DB=${MARIADB_DB}
+      - MQTT_USR=${MQTT_USR}
+      - MQTT_PASS=${MQTT_PASS}
+      - PUERTO_MQTTS=${PUERTO_MQTTS}
+      - SERVIDOR=${SERVIDOR}
+      - TOPICO=${TOPICO}
+      - MQTT_HOST=${MQTT_HOST}
     restart: unless-stopped
     depends_on:
       - mariadb
+      - mosquitto
 volumes:
   portainer_data:
