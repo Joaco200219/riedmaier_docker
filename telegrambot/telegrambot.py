@@ -34,7 +34,7 @@ async def mqtt_listener(application: Application): #Para escuchar el tópico de 
             async with aiomqtt.Client(hostname=mqtt_host, port=1883, username=usuario_mqtt, password=password_mqtt) as client:
                 # Nos suscribimos al tópico exacto donde publica la Raspi
                 await client.subscribe(f"{topico}/")
-                logging.info(f"🎧 Escuchando estado en {topico}/...")
+                logging.info(f"Escuchando estado en {topico}/...")
                 
                 async for message in client.messages:
                     payload = message.payload.decode()
@@ -115,16 +115,52 @@ async def ask_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return VALUE
 
 async def receive_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recibe el texto escrito por el usuario y lo publica en MQTT."""
+    """Recibe el texto escrito por el usuario, lo valida y lo publica en MQTT."""
     valor = update.message.text.lower()
     comando = context.user_data.get("comando") # Recuperamos qué botón había apretado
     
-    if comando:
+    if not comando:
+        # Por seguridad, si se pierde el contexto
+        await update.message.reply_text("Error de contexto. Por favor, vuelva a seleccionar una acción.")
+        return CMD
+
+    # --- BLOQUE DE VALIDACIÓN ---
+    es_valido = False
+    error_msg = ""
+
+    if comando == "rele":
+        if valor in ["0", "1"]:
+            es_valido = True
+        else:
+            error_msg = "Error: El relé solo acepta '0' o '1'. Ingrese el valor nuevamente:"
+            
+    elif comando == "modo":
+        if valor in ["auto", "manual"]:
+            es_valido = True
+        else:
+            error_msg = "Error: El modo debe ser 'auto' o 'manual'. Ingrese el valor nuevamente:"
+            
+    elif comando == "periodo":
+        if valor.isdigit() and int(valor) > 0:
+            es_valido = True
+        else:
+            error_msg = "Error: El periodo debe ser un número entero positivo (ej. 60). Ingrese nuevamente:"
+            
+    elif comando == "setpoint":
+        try:
+            float(valor) # Intentamos convertir a decimal
+            es_valido = True
+        except ValueError:
+            error_msg = "Error: El setpoint debe ser un número válido (ej. 25 o 25.5). Ingrese nuevamente:"
+
+    # --- EJECUCIÓN ---
+    if es_valido:
         await publish_mqtt(f"{topico}/{comando}", valor)
         await update.message.reply_text(f"Comando enviado: {comando} -> {valor}")
-    
-    # Volvemos al estado inicial para que pueda seguir usando los botones
-    return CMD
+        return CMD # Todo ok, volvemos al menú principal
+    else:
+        await update.message.reply_text(error_msg)
+        return VALUE # Dato inválido, nos quedamos esperando que escriba bien
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Permite salir del flujo de conversación."""
