@@ -4,6 +4,8 @@ import os, logging
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
+import paho.mqtt.publish as publish 
+import json
 
 logging.basicConfig(format='%(asctime)s - CRUD - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -19,6 +21,10 @@ app.config["MYSQL_PASSWORD"] = os.environ["MYSQL_PASSWORD"]
 app.config["MYSQL_DB"] = os.environ["MYSQL_DB"]
 app.config["MYSQL_HOST"] = os.environ["MYSQL_HOST"]
 app.config['PERMANENT_SESSION_LIFETIME']=180
+topico = os.environ["TOPICO"] # MAC raspi para enviar comandos 
+mqtt_host = os.environ["MQTT_HOST"]
+usuario_mqtt = os.environ["MQTT_USR"]
+password_mqtt = os.environ["MQTT_PASS"]
 mysql = MySQL(app)
 
 # rutas
@@ -79,65 +85,52 @@ def login():
                 return redirect(url_for('login'))
     return render_template('login.html')
 
-@app.route('/')
+# Esta seria la pagina principal luego de login
+@app.route('/', methods=["GET", "POST"])
 @require_login
 def index():
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos')
-    datos = cur.fetchall()
-    cur.close()
-    return render_template('index.html', contactos = datos)
+    if request.method == "POST":
 
-@app.route('/add_contact', methods=['POST'])
-@require_login
-def add_contact():
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("INSERT INTO contactos (nombre, tel, email) VALUES (%s,%s,%s)"
-                    , (nombre, tel, email))
-        if mysql.connection.affected_rows():
-            flash('Se agregó un contacto')  # usa sesión
-            logging.info("se agregó un contacto")
-            mysql.connection.commit()
-    return redirect(url_for('index'))
+        topico_seleccionado = request.form.get("topico")
+        if not topico_seleccionado:
+            flash('Error: Selecciona un nodo de destino')
+            return redirect(url_for('index'))
 
-@app.route('/borrar/<string:id>', methods = ['GET'])
-@require_login
-def borrar_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('DELETE FROM contactos WHERE id = %s', (id,))
-    if mysql.connection.affected_rows():
-        flash('Se eliminó un contacto')  # usa sesión
-        logging.info("se eliminó un contacto")
-        mysql.connection.commit()
-    return redirect(url_for('index'))
+        comando = request.form.get("comando")
+        if not comando:
+            flash('Error: Selecciona un comando para enviar')
+            return redirect(url_for('index'))
+            
+        credenciales = {'username': usuario_mqtt, 'password': password_mqtt}
+        
+        if comando == "destello":
+            topico_destello = f"{topico_seleccionado}/destello"
+            payload = "" 
+            publish.single(topico_destello, payload, hostname=mqtt_host, auth=credenciales)
+            
+            flash('Comando destello enviado con éxito') # Agregado para UX
+            logging.info(f"se envió el comando destello al tópico {topico_destello}")
 
-@app.route('/editar/<id>', methods = ['GET'])
-@require_login
-def conseguir_contacto(id):
-    cur = mysql.connection.cursor()
-    cur.execute('SELECT * FROM contactos WHERE id = %s', (id,))
-    datos = cur.fetchone()
-    logging.info(datos)
-    return render_template('editar-contacto.html', contacto = datos)
+        elif comando == "setpoint":
+            valor = request.form.get("valor")
+            if not valor:
+                flash('Error: Ingresa un valor para el setpoint')
+                return redirect(url_for('index'))
+            try:
+                topico_setpoint = f"{topico_seleccionado}/setpoint"
+                valor_float = float(valor)
+                payload = f"{valor_float}"
+                publish.single(topico_setpoint, payload, hostname=mqtt_host, auth=credenciales)
+                
+                flash(f'Setpoint actualizado a {valor_float}') # Agregado para UX
+                logging.info("se envió el comando setpoint con valor {}".format(valor_float))
+            except ValueError:
+                flash('Error: Valor inválido para setpoint, ingresa un número')
+                return redirect(url_for('index'))
+                
+    return render_template('index.html', mac_principal=topico)
 
-@app.route('/actualizar/<id>', methods=['POST'])
-@require_login
-def actualizar_contacto(id):
-    if request.method == 'POST':
-        nombre = request.form['nombre']
-        tel = request.form['tel']
-        email = request.form['email']
-        cur = mysql.connection.cursor()
-        cur.execute("UPDATE contactos SET nombre=%s, tel=%s, email=%s WHERE id=%s", (nombre, tel, email, id))
-    if mysql.connection.affected_rows():
-        flash('Se actualizó un contacto')  # usa sesión
-        logging.info("se actualizó un contacto")
-        mysql.connection.commit()
-    return redirect(url_for('index'))
+
 
 @app.route("/logout")
 @require_login
